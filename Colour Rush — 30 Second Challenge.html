@@ -1,0 +1,165 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#090d20">
+<title>Colour Rush — 30 Second Challenge</title>
+<style>
+:root{--bg:#090d20;--panel:#151c38;--cyan:#39e7ff;--pink:#ff4fc8;--yellow:#ffe66d}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;touch-action:none}
+body{display:grid;place-items:center;background:radial-gradient(circle at 50% 10%,#202b58 0,#0b1028 45%,#070a17 100%)}
+#game{position:relative;width:min(100vw,520px);height:min(100dvh,900px);overflow:hidden;background:linear-gradient(180deg,#111a3b,#080d20);border-inline:1px solid #34416b;box-shadow:0 0 55px #0009}
+canvas{display:block;width:100%;height:100%}
+.hud{position:absolute;inset:env(safe-area-inset-top) 0 auto;display:flex;justify-content:space-between;gap:8px;padding:14px 16px;pointer-events:none}
+.stat{background:#101831c9;border:1px solid #ffffff22;border-radius:14px;padding:7px 12px;min-width:82px;text-align:center;backdrop-filter:blur(8px)}
+.stat small{display:block;color:#aab6dc;font-size:10px;letter-spacing:1.4px;font-weight:800}
+.stat strong{font-size:21px;line-height:1.3}
+#overlay{position:absolute;inset:0;display:grid;place-items:center;padding:24px;background:#060a19b8;backdrop-filter:blur(8px)}
+.card{width:min(100%,390px);text-align:center;padding:28px 22px;border:1px solid #ffffff26;border-radius:26px;background:linear-gradient(145deg,#1a2550f2,#10162ff2);box-shadow:0 20px 70px #0009}
+.logo{font-size:clamp(34px,10vw,54px);font-weight:1000;line-height:.95;letter-spacing:-2px;background:linear-gradient(90deg,#4af1ff,#ff54d1,#ffe66d);background-clip:text;color:transparent}
+.tag{color:#bdc8ed;margin:12px 0 20px;font-size:14px}
+.instructions{font-size:13px;line-height:1.65;color:#dce4ff;margin:14px 0 22px}
+button{border:0;border-radius:15px;padding:14px 20px;font-weight:900;font-size:16px;color:#071022;background:linear-gradient(90deg,#47efff,#a5ffda);width:100%;cursor:pointer;box-shadow:0 7px 25px #39e7ff44}
+button:active{transform:scale(.98)}
+.secondary{margin-top:10px;background:#ffffff14;color:#fff;border:1px solid #ffffff28;box-shadow:none}
+.hidden{display:none!important}
+#toast{position:absolute;bottom:25px;left:50%;transform:translateX(-50%);background:#111a35e8;border:1px solid #ffffff30;padding:9px 14px;border-radius:30px;font-size:12px;white-space:nowrap;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.show{opacity:1}
+.footer{font-size:11px;color:#8f9bc3;margin-top:14px}
+</style>
+</head>
+<body>
+<main id="game" aria-label="Colour Rush game">
+  <canvas id="canvas"></canvas>
+  <div class="hud">
+    <div class="stat"><small>SCORE</small><strong id="score">0</strong></div>
+    <div class="stat"><small>TIME</small><strong id="time">30</strong></div>
+    <div class="stat"><small>BEST</small><strong id="best">0</strong></div>
+  </div>
+  <section id="overlay">
+    <div class="card" id="startCard">
+      <div class="logo">COLOUR<br>RUSH</div>
+      <div class="tag">30 SECOND CHALLENGE</div>
+      <div class="instructions">🟡 Collect glowing coins <b>(+10 points)</b><br>🔴 Dodge the red danger orbs<br>⚡ Survive, score high and beat your best!<br><br>Move your player by dragging your finger or using ← → keys.</div>
+      <button id="startBtn">START GAME</button>
+      <div class="footer">Quick game • No account • Your best score stays on this device</div>
+    </div>
+    <div class="card hidden" id="endCard">
+      <div class="logo" style="font-size:42px">TIME UP!</div>
+      <div class="tag">Your 30-second run is complete</div>
+      <div style="font-size:13px;color:#aebbe3">YOUR SCORE</div>
+      <div id="finalScore" style="font-size:58px;font-weight:1000;color:#ffe66d">0</div>
+      <div id="newBest" style="color:#62f5d0;font-weight:800;min-height:24px"></div>
+      <button id="againBtn">PLAY AGAIN</button>
+      <button id="shareBtn" class="secondary">SHARE MY SCORE</button>
+      <div class="footer">Challenge a friend: can they beat your score?</div>
+    </div>
+  </section>
+  <div id="toast">Copied!</div>
+</main>
+<script>
+(()=>{
+'use strict';
+const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id);
+const scoreEl=$('score'),timeEl=$('time'),bestEl=$('best'),overlay=$('overlay');
+let W=0,H=0,dpr=1,playing=false,score=0,timeLeft=30,best=Number(localStorage.getItem('colorRushBest')||0);
+let player={x:0,y:0,r:17,targetX:0},objects=[],particles=[],last=0,elapsed=0,spawnCoin=0,spawnBad=0,raf=0,wasNewBest=false;
+bestEl.textContent=best;
+function resize(){
+ const rect=canvas.getBoundingClientRect();dpr=Math.min(devicePixelRatio||1,2);
+ W=rect.width;H=rect.height;canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+ ctx.setTransform(dpr,0,0,dpr,0,0);
+ player.y=H*.82;if(!player.x){player.x=W/2;player.targetX=W/2}
+}
+addEventListener('resize',resize);resize();
+function roundedRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function drawBackground(){
+ ctx.clearRect(0,0,W,H);
+ const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#111b40');g.addColorStop(1,'#080d20');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ ctx.save();ctx.strokeStyle='#8aa4ff12';ctx.lineWidth=1;
+ const offset=(elapsed*35)%42;
+ for(let y=-42+offset;y<H;y+=42){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+ for(let x=0;x<W;x+=42){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+ ctx.restore();
+}
+function glowCircle(x,y,r,color){
+ ctx.save();ctx.shadowBlur=22;ctx.shadowColor=color;ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.restore();
+}
+function drawPlayer(){
+ ctx.save();ctx.translate(player.x,player.y);ctx.shadowBlur=25;ctx.shadowColor='#39e7ff';
+ const g=ctx.createRadialGradient(-5,-7,2,0,0,player.r+5);g.addColorStop(0,'#fff');g.addColorStop(.3,'#9fffff');g.addColorStop(1,'#19a8ff');
+ ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,player.r,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#d9ffff';ctx.lineWidth=2;ctx.stroke();ctx.restore();
+}
+function burst(x,y,color,n=10){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=40+Math.random()*150;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.45,max:.45,color,r:2+Math.random()*3})}}
+function spawn(type){
+ const r=type==='coin'?11:14;
+ objects.push({type,x:22+Math.random()*(W-44),y:-25,r,speed:(type==='coin'?190:225)+Math.min(elapsed*5,145)});
+}
+function endGame(){
+ playing=false;cancelAnimationFrame(raf);
+ wasNewBest=score>best;if(wasNewBest){best=score;localStorage.setItem('colorRushBest',String(best));bestEl.textContent=best}
+ $('finalScore').textContent=score;$('newBest').textContent=wasNewBest?'🏆 NEW PERSONAL BEST!':'';
+ $('startCard').classList.add('hidden');$('endCard').classList.remove('hidden');overlay.classList.remove('hidden');
+}
+function startGame(){
+ cancelAnimationFrame(raf);score=0;timeLeft=30;elapsed=0;objects=[];particles=[];spawnCoin=0;spawnBad=0;
+ player.x=W/2;player.targetX=W/2;player.y=H*.82;playing=true;last=performance.now();
+ scoreEl.textContent='0';timeEl.textContent='30';overlay.classList.add('hidden');
+ raf=requestAnimationFrame(loop);
+}
+function loop(now){
+ if(!playing)return;
+ const dt=Math.min((now-last)/1000,.04);last=now;elapsed+=dt;timeLeft=Math.max(0,30-elapsed);
+ scoreEl.textContent=score;timeEl.textContent=Math.ceil(timeLeft);
+ const difficulty=1+Math.min(elapsed/24,1.2);
+ player.x+=(player.targetX-player.x)*Math.min(1,dt*14);
+ spawnCoin-=dt;spawnBad-=dt;
+ if(spawnCoin<=0){spawn('coin');spawnCoin=Math.max(.34,.72-elapsed*.008)}
+ if(spawnBad<=0){spawn('bad');spawnBad=Math.max(.48,1.05-elapsed*.012)}
+ drawBackground();
+ for(let i=objects.length-1;i>=0;i--){
+  const o=objects[i];o.y+=o.speed*difficulty*dt;
+  if(o.type==='coin'){
+   ctx.save();ctx.shadowBlur=20;ctx.shadowColor='#ffe66d';ctx.fillStyle='#ffe66d';ctx.beginPath();ctx.arc(o.x,o.y,o.r,0,Math.PI*2);ctx.fill();
+   ctx.strokeStyle='#fff8c4';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#9a6500';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('$',o.x,o.y+1);ctx.restore();
+  }else{
+   glowCircle(o.x,o.y,o.r,'#ff416c');ctx.strokeStyle='#ffc1d0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(o.x,o.y,o.r-4,0,Math.PI*2);ctx.stroke();
+  }
+  const dx=o.x-player.x,dy=o.y-player.y,dist=Math.hypot(dx,dy);
+  if(dist<o.r+player.r-4){
+   if(o.type==='coin'){score+=10;burst(o.x,o.y,'#ffe66d',9);objects.splice(i,1)}
+   else{burst(player.x,player.y,'#ff416c',20);endGame();return}
+  }else if(o.y>H+30)objects.splice(i,1);
+ }
+ for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97;ctx.globalAlpha=Math.max(0,p.life/p.max);glowCircle(p.x,p.y,p.r,p.color);ctx.globalAlpha=1;if(p.life<=0)particles.splice(i,1)}
+ drawPlayer();
+ if(timeLeft<=0){endGame();return}
+ raf=requestAnimationFrame(loop);
+}
+function move(x){player.targetX=Math.max(player.r+4,Math.min(W-player.r-4,x))}
+let pointerDown=false;
+canvas.addEventListener('pointerdown',e=>{pointerDown=true;canvas.setPointerCapture?.(e.pointerId);move(e.clientX-canvas.getBoundingClientRect().left)});
+canvas.addEventListener('pointermove',e=>{if(pointerDown)move(e.clientX-canvas.getBoundingClientRect().left)});
+canvas.addEventListener('pointerup',()=>pointerDown=false);
+canvas.addEventListener('pointercancel',()=>pointerDown=false);
+addEventListener('keydown',e=>{if(e.key==='ArrowLeft')move(player.targetX-38);if(e.key==='ArrowRight')move(player.targetX+38)});
+$('startBtn').addEventListener('click',startGame);$('againBtn').addEventListener('click',startGame);
+$('shareBtn').addEventListener('click',async()=>{
+ const message=`I scored ${score} points in Colour Rush! 🏆 Can you beat me?`;
+ try{if(navigator.share)await navigator.share({title:'Colour Rush Challenge',text:message,url:location.href});
+ else if(navigator.clipboard){await navigator.clipboard.writeText(message+' '+location.href);toast('Score copied — share it with a friend!')}
+ else toast(message)}catch(e){if(e.name!=='AbortError')toast('Sharing is not available on this browser')}
+});
+let toastTimer;function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2200)}
+drawBackground();drawPlayer();
+})();
+</script>
+</body>
+</html>
+
+</body></html>
